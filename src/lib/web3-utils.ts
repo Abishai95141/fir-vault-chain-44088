@@ -75,6 +75,9 @@ export const NETWORK_CONFIG = {
 // FIR Contract address on Polygon Amoy
 export const FIR_CONTRACT_ADDRESS = '0x98feBB853C9B2c631a512171794a54AA69fe14cB';
 
+// Contract deployment block number (to optimize event queries)
+export const CONTRACT_DEPLOYMENT_BLOCK = 15691900; // Approximate block when contract was deployed
+
 let web3Instance: Web3 | null = null;
 
 export const getWeb3 = (): Web3 => {
@@ -302,9 +305,18 @@ export const queryAllFIRSubmittedEvents = async (): Promise<any[]> => {
       return [];
     }
     
-    // Get all FIRSubmitted events from the beginning
+    // Get current block number
+    const currentBlock = await web3.eth.getBlockNumber();
+    
+    // Query from deployment block to avoid "query returned more than X results" errors
+    // Use deployment block or last 10000 blocks, whichever is more recent
+    const fromBlock = Math.max(Number(currentBlock) - 10000, CONTRACT_DEPLOYMENT_BLOCK);
+    
+    console.log(`Querying FIR events from block ${fromBlock} to ${currentBlock}`);
+    
+    // Get all FIRSubmitted events from deployment
     const events = await contract.getPastEvents('FIRSubmitted', {
-      fromBlock: 0,
+      fromBlock: fromBlock,
       toBlock: 'latest'
     });
     
