@@ -176,7 +176,29 @@ export const submitFIRToBlockchain = async (
     const code = await web3.eth.getCode(FIR_CONTRACT_ADDRESS);
     if (code === '0x' || code === '0x0') {
       console.warn('No contract found at address, using demo mode');
-      throw new Error('Contract not deployed');
+      throw new Error('CONTRACT_NOT_DEPLOYED');
+    }
+    
+    // First try to call the function to check if it would revert
+    try {
+      await contract.methods
+        .submitFIR(firId, dataCID, hashBytes)
+        .call({ from: walletAddress });
+    } catch (callError: any) {
+      console.error('Contract call simulation failed:', callError);
+      
+      // Check for specific revert reasons
+      const errorMessage = callError.message?.toLowerCase() || '';
+      if (errorMessage.includes('fir already exists')) {
+        throw new Error('FIR_ALREADY_EXISTS');
+      } else if (errorMessage.includes('fir id cannot be empty')) {
+        throw new Error('INVALID_FIR_ID');
+      } else if (errorMessage.includes('data cid cannot be empty')) {
+        throw new Error('INVALID_DATA_CID');
+      }
+      
+      // Generic contract revert
+      throw new Error('CONTRACT_REVERT');
     }
     
     // Estimate gas
@@ -186,18 +208,34 @@ export const submitFIRToBlockchain = async (
     
     console.log('Gas estimate:', gasEstimate);
     
-    // Send transaction
+    // Send transaction with increased gas limit
     const tx = await contract.methods
       .submitFIR(firId, dataCID, hashBytes)
       .send({ 
         from: walletAddress,
-        gas: Math.floor(Number(gasEstimate) * 1.5).toString() // Add 50% buffer
+        gas: Math.floor(Number(gasEstimate) * 2).toString() // Add 100% buffer for safety
       });
     
     console.log('Transaction successful:', tx.transactionHash);
     return tx.transactionHash;
   } catch (error: any) {
     console.error('Blockchain submission error:', error);
+    
+    // Provide specific error messages
+    let errorReason = 'Unknown error';
+    if (error.message === 'CONTRACT_NOT_DEPLOYED') {
+      errorReason = 'Smart contract not deployed on this network';
+    } else if (error.message === 'FIR_ALREADY_EXISTS') {
+      errorReason = 'A FIR with this ID already exists on the blockchain';
+    } else if (error.message === 'INVALID_FIR_ID') {
+      errorReason = 'Invalid FIR ID provided';
+    } else if (error.message === 'INVALID_DATA_CID') {
+      errorReason = 'Invalid IPFS CID provided';
+    } else if (error.message === 'CONTRACT_REVERT') {
+      errorReason = 'Smart contract rejected the transaction';
+    }
+    
+    console.warn('Using demo mode due to:', errorReason);
     
     // For demo/testing purposes, generate a mock transaction hash
     const mockTxHash = `0x${hashData(firId + dataCID + Date.now())}`;
@@ -211,7 +249,8 @@ export const submitFIRToBlockchain = async (
       walletAddress,
       timestamp: Date.now(),
       status: 'pending',
-      mockTx: true
+      mockTx: true,
+      errorReason
     };
     localStorage.setItem(`fir_tx_${firId}`, JSON.stringify(firRecord));
     
