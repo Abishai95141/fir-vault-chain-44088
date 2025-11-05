@@ -208,12 +208,21 @@ export const submitFIRToBlockchain = async (
     
     console.log('Gas estimate:', gasEstimate);
     
-    // Send transaction with increased gas limit
+    // Get current gas prices for EIP-1559
+    const gasPrice = await web3.eth.getGasPrice();
+    const maxPriorityFeePerGas = web3.utils.toWei('30', 'gwei'); // Tip for miner
+    const maxFeePerGas = (BigInt(gasPrice) + BigInt(maxPriorityFeePerGas)).toString();
+    
+    console.log('Gas pricing:', { gasPrice, maxPriorityFeePerGas, maxFeePerGas });
+    
+    // Send transaction with EIP-1559 gas parameters
     const tx = await contract.methods
       .submitFIR(firId, dataCID, hashBytes)
       .send({ 
         from: walletAddress,
-        gas: Math.floor(Number(gasEstimate) * 2).toString() // Add 100% buffer for safety
+        gas: Math.floor(Number(gasEstimate) * 2).toString(), // Add 100% buffer for safety
+        maxFeePerGas,
+        maxPriorityFeePerGas
       });
     
     console.log('Transaction successful:', tx.transactionHash);
