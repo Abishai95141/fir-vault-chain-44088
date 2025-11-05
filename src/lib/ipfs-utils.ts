@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 
 // Public IPFS gateway for reading (Pinata)
-const IPFS_GATEWAY = 'https://gateway.pinata.cloud/ipfs/';
+const IPFS_GATEWAY = 'https://ipfs.io/ipfs/';
 
 export const uploadToIPFS = async (data: any): Promise<string> => {
   try {
