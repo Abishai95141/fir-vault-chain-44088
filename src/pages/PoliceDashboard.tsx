@@ -25,10 +25,42 @@ const PoliceDashboard = () => {
       return;
     }
 
-    // In a real implementation, query all FIRs from blockchain
-    // For demo, show empty state
-    setFirs([]);
-    setFilteredFirs([]);
+    const fetchAllFIRs = async () => {
+      try {
+        const { queryAllFIRSubmittedEvents } = await import('@/lib/web3-utils');
+        const { fetchFromIPFS } = await import('@/lib/ipfs-utils');
+        
+        // Get all FIR events from blockchain
+        const events = await queryAllFIRSubmittedEvents();
+        
+        // Fetch full FIR data from IPFS for each event
+        const firPromises = events.map(async (event) => {
+          try {
+            const ipfsData = await fetchFromIPFS(event.dataCID);
+            return {
+              ...ipfsData,
+              id: event.firId,
+              blockchainTxHash: event.transactionHash,
+              submitterAddress: event.submitter,
+              createdAt: new Date().toISOString()
+            };
+          } catch (error) {
+            console.error(`Error fetching IPFS data for ${event.firId}:`, error);
+            return null;
+          }
+        });
+        
+        const allFirs = (await Promise.all(firPromises)).filter(Boolean) as FIRData[];
+        setFirs(allFirs);
+        setFilteredFirs(allFirs);
+      } catch (error) {
+        console.error('Error fetching FIRs:', error);
+        setFirs([]);
+        setFilteredFirs([]);
+      }
+    };
+
+    fetchAllFIRs();
   }, [userRole]);
 
   useEffect(() => {

@@ -16,9 +16,49 @@ const CivilianDashboard = () => {
   const [firs, setFirs] = useState<FIRData[]>([]);
 
   useEffect(() => {
-    // In a real implementation, query blockchain events by user's wallet address
-    // For demo, show empty state
-    setFirs([]);
+    const fetchUserFIRs = async () => {
+      if (!account) {
+        setFirs([]);
+        return;
+      }
+
+      try {
+        const { queryAllFIRSubmittedEvents } = await import('@/lib/web3-utils');
+        const { fetchFromIPFS } = await import('@/lib/ipfs-utils');
+        
+        // Get all FIR events from blockchain
+        const events = await queryAllFIRSubmittedEvents();
+        
+        // Filter events by current user's wallet address
+        const userEvents = events.filter(
+          event => event.submitter.toLowerCase() === account.toLowerCase()
+        );
+        
+        // Fetch full FIR data from IPFS for each event
+        const firPromises = userEvents.map(async (event) => {
+          try {
+            const ipfsData = await fetchFromIPFS(event.dataCID);
+            return {
+              ...ipfsData,
+              id: event.firId,
+              blockchainTxHash: event.transactionHash,
+              createdAt: new Date().toISOString() // Can be enhanced with block timestamp
+            };
+          } catch (error) {
+            console.error(`Error fetching IPFS data for ${event.firId}:`, error);
+            return null;
+          }
+        });
+        
+        const firs = (await Promise.all(firPromises)).filter(Boolean) as FIRData[];
+        setFirs(firs);
+      } catch (error) {
+        console.error('Error fetching FIRs:', error);
+        setFirs([]);
+      }
+    };
+
+    fetchUserFIRs();
   }, [account]);
 
   const getStatusBadgeVariant = (status?: FIRStatus) => {

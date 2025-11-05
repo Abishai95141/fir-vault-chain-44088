@@ -290,6 +290,41 @@ export const queryFIRFromBlockchain = async (firId: string): Promise<any> => {
   }
 };
 
+export const queryAllFIRSubmittedEvents = async (): Promise<any[]> => {
+  try {
+    const web3 = getWeb3();
+    const contract = new web3.eth.Contract(FIR_CONTRACT_ABI, FIR_CONTRACT_ADDRESS);
+    
+    // Check if contract exists
+    const code = await web3.eth.getCode(FIR_CONTRACT_ADDRESS);
+    if (code === '0x' || code === '0x0') {
+      console.warn('Contract not deployed, returning empty array');
+      return [];
+    }
+    
+    // Get all FIRSubmitted events from the beginning
+    const events = await contract.getPastEvents('FIRSubmitted', {
+      fromBlock: 0,
+      toBlock: 'latest'
+    });
+    
+    console.log('Found FIR events:', events.length);
+    
+    return events
+      .filter((event): event is any => typeof event !== 'string')
+      .map(event => ({
+        firId: event.returnValues.firId,
+        dataCID: event.returnValues.dataCID,
+        submitter: event.returnValues.submitter,
+        blockNumber: event.blockNumber,
+        transactionHash: event.transactionHash
+      }));
+  } catch (error) {
+    console.error('Error fetching FIR events:', error);
+    return [];
+  }
+};
+
 // Extend window type for ethereum
 declare global {
   interface Window {
