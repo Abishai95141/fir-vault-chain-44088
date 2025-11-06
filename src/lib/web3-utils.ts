@@ -293,6 +293,92 @@ export const queryFIRFromBlockchain = async (firId: string): Promise<any> => {
   }
 };
 
+export const updateFIRStatusOnBlockchain = async (
+  firId: string,
+  newStatus: number,
+  walletAddress: string
+): Promise<string> => {
+  console.log('Updating FIR status on blockchain:', { firId, newStatus, walletAddress });
+  
+  try {
+    const web3 = getWeb3();
+    const contract = new web3.eth.Contract(FIR_CONTRACT_ABI, FIR_CONTRACT_ADDRESS);
+    
+    // Check if contract exists at address
+    const code = await web3.eth.getCode(FIR_CONTRACT_ADDRESS);
+    if (code === '0x' || code === '0x0') {
+      console.warn('No contract found at address');
+      throw new Error('CONTRACT_NOT_DEPLOYED');
+    }
+    
+    // Validate status value (0: Pending, 1: UnderInvestigation, 2: Closed)
+    if (newStatus < 0 || newStatus > 2) {
+      throw new Error('INVALID_STATUS');
+    }
+    
+    // First try to call the function to check if it would revert
+    try {
+      await contract.methods
+        .updateFIRStatus(firId, newStatus)
+        .call({ from: walletAddress });
+    } catch (callError: any) {
+      console.error('Contract call simulation failed:', callError);
+      
+      // Check for specific revert reasons
+      const errorMessage = callError.message?.toLowerCase() || '';
+      if (errorMessage.includes('fir does not exist')) {
+        throw new Error('FIR_NOT_FOUND');
+      } else if (errorMessage.includes('invalid status')) {
+        throw new Error('INVALID_STATUS');
+      }
+      
+      throw new Error('CONTRACT_REVERT');
+    }
+    
+    // Estimate gas
+    const gasEstimate = await contract.methods
+      .updateFIRStatus(firId, newStatus)
+      .estimateGas({ from: walletAddress });
+    
+    console.log('Gas estimate:', gasEstimate);
+    
+    // Get current gas prices for EIP-1559
+    const gasPrice = await web3.eth.getGasPrice();
+    const maxPriorityFeePerGas = web3.utils.toWei('30', 'gwei');
+    const maxFeePerGas = (BigInt(gasPrice) + BigInt(maxPriorityFeePerGas)).toString();
+    
+    console.log('Gas pricing:', { gasPrice, maxPriorityFeePerGas, maxFeePerGas });
+    
+    // Send transaction with EIP-1559 gas parameters
+    const tx = await contract.methods
+      .updateFIRStatus(firId, newStatus)
+      .send({ 
+        from: walletAddress,
+        gas: Math.floor(Number(gasEstimate) * 2).toString(),
+        maxFeePerGas,
+        maxPriorityFeePerGas
+      });
+    
+    console.log('Status update transaction successful:', tx.transactionHash);
+    return tx.transactionHash;
+  } catch (error: any) {
+    console.error('Blockchain status update error:', error);
+    
+    // Provide specific error messages
+    if (error.message === 'CONTRACT_NOT_DEPLOYED') {
+      throw new Error('Smart contract not deployed on this network');
+    } else if (error.message === 'FIR_NOT_FOUND') {
+      throw new Error('FIR not found on blockchain');
+    } else if (error.message === 'INVALID_STATUS') {
+      throw new Error('Invalid status value');
+    } else if (error.message === 'CONTRACT_REVERT') {
+      throw new Error('Smart contract rejected the transaction');
+    }
+    
+    throw error;
+  }
+};
+
 export const queryAllFIRSubmittedEvents = async (): Promise<any[]> => {
   try {
     const web3 = getWeb3();

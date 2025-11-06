@@ -8,16 +8,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useAuth } from '@/hooks/useAuth';
 import { Search, FileText, ExternalLink, Shield, Filter } from 'lucide-react';
 import { FIRData, FIRStatus, IncidentType } from '@/types/fir';
-import { getBlockchainExplorerUrl } from '@/lib/web3-utils';
+import { getBlockchainExplorerUrl, updateFIRStatusOnBlockchain } from '@/lib/web3-utils';
+import { useWeb3 } from '@/hooks/useWeb3';
 import { toast } from 'react-hot-toast';
 
 const PoliceDashboard = () => {
   const { userRole } = useAuth();
+  const { account, connect, isConnected } = useWeb3();
   const [firs, setFirs] = useState<FIRData[]>([]);
   const [filteredFirs, setFilteredFirs] = useState<FIRData[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
     if (userRole !== 'police') {
@@ -87,21 +90,40 @@ const PoliceDashboard = () => {
   }, [searchQuery, statusFilter, typeFilter, firs]);
 
   const handleStatusUpdate = async (firId: string, newStatus: FIRStatus) => {
+    // Check if wallet is connected
+    if (!isConnected || !account) {
+      toast.error('Please connect your wallet first');
+      await connect();
+      return;
+    }
+
+    setIsUpdating(true);
     try {
-      // In real implementation:
-      // 1. Re-hash the updated data
-      // 2. Upload new version to IPFS
-      // 3. Send update transaction to blockchain
-      // 4. Log to Supabase audit
+      // Map FIR status to contract status (0: Pending, 1: UnderInvestigation, 2: Closed)
+      const statusMap: Record<FIRStatus, number> = {
+        'pending': 0,
+        'under_investigation': 1,
+        'closed': 2
+      };
       
-      toast.success(`FIR status updated to ${newStatus.replace('_', ' ')}`);
+      const contractStatus = statusMap[newStatus];
+      
+      toast.loading('Updating status on blockchain...', { id: 'status-update' });
+      
+      // Send transaction to blockchain
+      const txHash = await updateFIRStatusOnBlockchain(firId, contractStatus, account);
+      
+      toast.success(`Status updated! Transaction: ${txHash.substring(0, 10)}...`, { id: 'status-update' });
       
       // Update local state
       setFirs(firs.map(fir => 
         fir.id === firId ? { ...fir, status: newStatus } : fir
       ));
-    } catch (error) {
-      toast.error('Failed to update status');
+    } catch (error: any) {
+      console.error('Failed to update status:', error);
+      toast.error(error.message || 'Failed to update status', { id: 'status-update' });
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -282,6 +304,7 @@ const PoliceDashboard = () => {
                       <Select
                         value={fir.status || 'pending'}
                         onValueChange={(v) => handleStatusUpdate(fir.id!, v as FIRStatus)}
+                        disabled={isUpdating}
                       >
                         <SelectTrigger className="w-[160px]">
                           <SelectValue />
