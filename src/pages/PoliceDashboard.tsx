@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useAuth } from '@/hooks/useAuth';
 import { Search, FileText, ExternalLink, Shield, Filter } from 'lucide-react';
 import { FIRData, FIRStatus, IncidentType } from '@/types/fir';
-import { getBlockchainExplorerUrl, updateFIRStatusOnBlockchain } from '@/lib/web3-utils';
+import { getBlockchainExplorerUrl, updateFIRStatusOnBlockchain, generateFIRId } from '@/lib/web3-utils';
 import { useWeb3 } from '@/hooks/useWeb3';
 import { toast } from 'react-hot-toast';
 
@@ -32,6 +32,7 @@ const PoliceDashboard = () => {
       try {
         const { queryAllFIRSubmittedEvents } = await import('@/lib/web3-utils');
         const { fetchFromIPFS } = await import('@/lib/ipfs-utils');
+        const { generateFIRId } = await import('@/lib/web3-utils');
         
         // Get all FIR events from blockchain
         const events = await queryAllFIRSubmittedEvents();
@@ -40,10 +41,20 @@ const PoliceDashboard = () => {
         const firPromises = events.map(async (event) => {
           try {
             const ipfsData = await fetchFromIPFS(event.dataCID);
-            // Use the firId from IPFS data, not from the event (indexed string returns hash)
+            
+            // For backward compatibility: use id from IPFS if available, 
+            // otherwise generate from the data (for old FIRs)
+            const firId = ipfsData.id || generateFIRId(ipfsData);
+            
+            console.log('Loaded FIR:', { 
+              firId, 
+              hasIdInIPFS: !!ipfsData.id,
+              victimName: ipfsData.victimName 
+            });
+            
             return {
               ...ipfsData,
-              // ipfsData.id should already contain the original firId
+              id: firId, // Ensure id is set
               blockchainTxHash: event.transactionHash,
               submitterAddress: event.submitter,
               createdAt: ipfsData.createdAt || new Date().toISOString()
@@ -91,6 +102,13 @@ const PoliceDashboard = () => {
   }, [searchQuery, statusFilter, typeFilter, firs]);
 
   const handleStatusUpdate = async (firId: string, newStatus: FIRStatus) => {
+    // Validate firId
+    if (!firId || firId.trim() === '') {
+      toast.error('Invalid FIR ID');
+      console.error('Invalid FIR ID:', firId);
+      return;
+    }
+    
     // Check if wallet is connected
     if (!isConnected || !account) {
       toast.error('Please connect your wallet first');
@@ -108,6 +126,8 @@ const PoliceDashboard = () => {
       };
       
       const contractStatus = statusMap[newStatus];
+      
+      console.log('Calling updateFIRStatusOnBlockchain with:', { firId, contractStatus, account });
       
       toast.loading('Updating status on blockchain...', { id: 'status-update' });
       

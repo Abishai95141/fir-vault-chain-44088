@@ -38,10 +38,15 @@ const CivilianDashboard = () => {
         const firPromises = userEvents.map(async (event) => {
           try {
             const ipfsData = await fetchFromIPFS(event.dataCID);
-            // Use the firId from IPFS data, not from the event (indexed string returns hash)
+            const { generateFIRId } = await import('@/lib/web3-utils');
+            
+            // For backward compatibility: use id from IPFS if available, 
+            // otherwise generate from the data (for old FIRs)
+            const firId = ipfsData.id || generateFIRId(ipfsData);
+            
             return {
               ...ipfsData,
-              // ipfsData.id should already contain the original firId
+              id: firId, // Ensure id is set
               blockchainTxHash: event.transactionHash,
               createdAt: ipfsData.createdAt || new Date().toISOString()
             };

@@ -300,6 +300,15 @@ export const updateFIRStatusOnBlockchain = async (
 ): Promise<string> => {
   console.log('Updating FIR status on blockchain:', { firId, newStatus, walletAddress });
   
+  // Validate inputs
+  if (!firId || firId.trim() === '') {
+    throw new Error('FIR ID is required');
+  }
+  
+  if (!walletAddress || walletAddress.trim() === '') {
+    throw new Error('Wallet address is required');
+  }
+  
   try {
     const web3 = getWeb3();
     const contract = new web3.eth.Contract(FIR_CONTRACT_ABI, FIR_CONTRACT_ADDRESS);
@@ -410,13 +419,23 @@ export const queryAllFIRSubmittedEvents = async (): Promise<any[]> => {
     
     return events
       .filter((event): event is any => typeof event !== 'string')
-      .map(event => ({
-        firId: event.returnValues.firId,
-        dataCID: event.returnValues.dataCID,
-        submitter: event.returnValues.submitter,
-        blockNumber: event.blockNumber,
-        transactionHash: event.transactionHash
-      }));
+      .map(event => {
+        // Note: indexed string parameters return keccak256 hash, not original value
+        // We need to get the actual firId from IPFS data
+        console.log('Event data:', { 
+          firIdHash: event.returnValues.firId,
+          dataCID: event.returnValues.dataCID,
+          submitter: event.returnValues.submitter 
+        });
+        
+        return {
+          firIdHash: event.returnValues.firId, // This is the hash, not actual ID
+          dataCID: event.returnValues.dataCID,
+          submitter: event.returnValues.submitter,
+          blockNumber: event.blockNumber,
+          transactionHash: event.transactionHash
+        };
+      });
   } catch (error) {
     console.error('Error fetching FIR events:', error);
     return [];
