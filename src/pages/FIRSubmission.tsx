@@ -119,8 +119,12 @@ const FIRSubmission = () => {
       const encryptedEmail = encryptSensitiveData(formData.contactEmail || '');
       const encryptedPhone = encryptSensitiveData(formData.contactPhone || '');
       
+      // Generate FIR ID first (before creating the data object)
+      const tempFirId = generateFIRId({ ...formData, timestamp: Date.now() });
+      
       const firDataForIPFS = {
         ...formData,
+        id: tempFirId, // Store the firId in IPFS data
         contactEmail: encryptedEmail,
         contactPhone: encryptedPhone,
         witnesses: witnesses.filter(w => w.name || w.contact),
@@ -141,8 +145,8 @@ const FIRSubmission = () => {
       toast.loading('Uploading FIR data to IPFS...', { id: toastId });
       const dataCID = await uploadToIPFS({ ...firDataForIPFS, evidenceFiles: fileCIDs });
       
-      // Generate FIR ID
-      const firId = generateFIRId(firDataForIPFS);
+      // Use the same FIR ID
+      const firId = tempFirId;
       const dataHash = hashData(firDataForIPFS);
 
       // Submit to blockchain

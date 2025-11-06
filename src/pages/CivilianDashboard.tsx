@@ -38,14 +38,15 @@ const CivilianDashboard = () => {
         const firPromises = userEvents.map(async (event) => {
           try {
             const ipfsData = await fetchFromIPFS(event.dataCID);
+            // Use the firId from IPFS data, not from the event (indexed string returns hash)
             return {
               ...ipfsData,
-              id: event.firId,
+              // ipfsData.id should already contain the original firId
               blockchainTxHash: event.transactionHash,
-              createdAt: new Date().toISOString() // Can be enhanced with block timestamp
+              createdAt: ipfsData.createdAt || new Date().toISOString()
             };
           } catch (error) {
-            console.error(`Error fetching IPFS data for ${event.firId}:`, error);
+            console.error(`Error fetching IPFS data for event:`, error);
             return null;
           }
         });
